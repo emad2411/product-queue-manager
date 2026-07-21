@@ -73,24 +73,36 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!brand.trim() || !mfr.trim()) return;
+    const trimmedBrand = brand.trim();
+    const trimmedMfr = mfr.trim();
+    if (!trimmedBrand || !trimmedMfr) return;
+
+    // Client-side duplicate check
+    const exists = queue.some(
+      (item) => item.mfr.toLowerCase() === trimmedMfr.toLowerCase()
+    );
+    if (exists) {
+      setError(`MFR "${trimmedMfr}" already exists in the queue.`);
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
 
     const { error: insertError } = await supabase
       .from("product_queue")
-      .insert({ brand: brand.trim(), mfr: mfr.trim() });
+      .insert({ brand: trimmedBrand, mfr: trimmedMfr });
 
     if (insertError) {
       if (insertError.code === "23505") {
-        setError("This MFR number already exists in the queue.");
+        setError(`MFR "${trimmedMfr}" already exists in the queue.`);
       } else {
         setError(insertError.message);
       }
     } else {
       setBrand("");
       setMfr("");
+      await fetchQueue();
     }
 
     setSubmitting(false);
@@ -129,12 +141,14 @@ export default function Home() {
           placeholder="Brand (e.g. Sony)"
           value={brand}
           onChange={(e) => setBrand(e.target.value)}
+          required
           className="flex-1 bg-secondary/50 border-white/10 placeholder:text-muted-foreground/60"
         />
         <Input
           placeholder="MFR number (e.g. ILCE-7M4/B)"
           value={mfr}
           onChange={(e) => setMfr(e.target.value)}
+          required
           className="flex-1 bg-secondary/50 border-white/10 placeholder:text-muted-foreground/60 font-mono text-sm"
         />
         <Button
