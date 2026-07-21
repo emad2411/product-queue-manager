@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase, type QueueItem } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | QueueItem["status"]>("all");
 
+  // Brand autocomplete
+  const [brands, setBrands] = useState<string[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+  const brandRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const fetchQueue = useCallback(async () => {
     const { data, error } = await supabase
       .from("product_queue")
@@ -45,9 +52,31 @@ export default function Home() {
     setLoading(false);
   }, []);
 
+  const fetchBrands = useCallback(async () => {
+    // Get unique brands from both product_queue and brands table
+    const [queueRes, brandsRes] = await Promise.all([
+      supabase.from("product_queue").select("brand"),
+      supabase.from("brands").select("name"),
+    ]);
+
+    const unique = new Set<string>();
+    if (queueRes.data) {
+      queueRes.data.forEach((r) => unique.add(r.brand));
+    }
+    if (brandsRes.data) {
+      brandsRes.data.forEach((r) => unique.add(r.name));
+    }
+    // Also add existing products' brands
+    const prodRes = await supabase.from("products").select("brand");
+    // products table doesn't have brand column directly, skip
+
+    setBrands(Array.from(unique).sort());
+  }, []);
+
   useEffect(() => {
     fetchQueue();
-  }, [fetchQueue]);
+    fetchBrands();
+  }, [fetchQueue, fetchBrands]);
 
   // Realtime subscription
   useEffect(() => {
@@ -70,6 +99,45 @@ export default function Home() {
       supabase.removeChannel(channel);
     };
   }, [fetchQueue]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (brandRef.current && !brandRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filteredBrands = brand.trim()
+    ? brands.filter((b) => b.toLowerCase().includes(brand.toLowerCase()))
+    : brands;
+
+  const handleBrandKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIndex((prev) =>
+        prev < filteredBrands.length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((prev) =>
+        prev > 0 ? prev - 1 : filteredBrands.length - 1
+      );
+    } else if (e.key === "Enter" && highlightIndex >= 0) {
+      e.preventDefault();
+      setBrand(filteredBrands[highlightIndex]);
+      setShowDropdown(false);
+      setHighlightIndex(-1);
+    } else if (e.key === "Escape") {
+      setShowDropdown(false);
+      setHighlightIndex(-1);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +171,7 @@ export default function Home() {
       setBrand("");
       setMfr("");
       await fetchQueue();
+      await fetchBrands();
     }
 
     setSubmitting(false);
@@ -137,13 +206,67 @@ export default function Home() {
         onSubmit={handleSubmit}
         className="flex flex-col sm:flex-row gap-3 mb-8"
       >
-        <Input
-          placeholder="Brand (e.g. Sony)"
-          value={brand}
-          onChange={(e) => setBrand(e.target.value)}
-          required
-          className="flex-1 bg-secondary/50 border-white/10 placeholder:text-muted-foreground/60"
-        />
+        {/* Brand combobox */}
+        <div ref={brandRef} className="relative flex-1">
+          <Input
+            ref={inputRef}
+            placeholder="Brand (e.g. Sony)"
+            value={brand}
+            onChange={(e) => {
+              setBrand(e.target.value);
+              setShowDropdown(true);
+              setHighlightIndex(-1);
+            }}
+            onFocus={() => setShowDropdown(true)}
+            onKeyDown={handleBrandKeyDown}
+            required
+            autoComplete="off"
+            className="bg-secondary/50 border-white/10 placeholder:text-muted-foreground/60"
+          />
+          {showDropdown && filteredBrands.length > 0 && (
+            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-white/10 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+              {filteredBrands.map((b, i) => (
+                <button
+                  key={b}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setBrand(b);
+                    setShowDropdown(false);
+                    setHighlightIndex(-1);
+                    mfr
+                      ? inputRef.current?.closest("form")
+                          ?.querySelector<HTMLInputElement>(
+                            'input[placeholder*="MFR"]'
+                          )
+                          ?.focus()
+                      : null;
+                  }}
+                  onMouseEnter={() => setHighlightIndex(i)}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                    i === highlightIndex
+                      ? "bg-primary/15 text-primary"
+                      : "text-foreground hover:bg-white/5"
+                  }`}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+          )}
+          {showDropdown &&
+            brand.trim() &&
+            !filteredBrands.some(
+              (b) => b.toLowerCase() === brand.toLowerCase()
+            ) && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-white/10 rounded-lg shadow-xl">
+                <div className="px-3 py-2 text-sm text-muted-foreground">
+                  + Add &quot;{brand.trim()}&quot; as new brand
+                </div>
+              </div>
+            )}
+        </div>
+
         <Input
           placeholder="MFR number (e.g. ILCE-7M4/B)"
           value={mfr}
