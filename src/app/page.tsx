@@ -168,6 +168,18 @@ export default function Home() {
         setError(insertError.message);
       }
     } else {
+      // Auto-insert new brand into brands table if it doesn't exist
+      if (!brands.some((b) => b.toLowerCase() === trimmedBrand.toLowerCase())) {
+        const slug = trimmedBrand
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
+        await supabase
+          .from("brands")
+          .insert({ name: trimmedBrand, slug })
+          .select()
+          .single();
+      }
       setBrand("");
       setMfr("");
       await fetchQueue();
