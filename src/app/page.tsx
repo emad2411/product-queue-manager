@@ -112,10 +112,10 @@ export default function Home() {
     <main className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4 py-6 sm:py-10">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-          Product Queue
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
+        <div className="flex items-center gap-3 mb-1">
+          <img src="/logo.svg" alt="Product Queue" className="h-8 w-auto" />
+        </div>
+        <p className="text-muted-foreground mt-2 text-sm">
           Add products for the researcher to fetch from B&H
         </p>
       </div>

@@ -15,6 +15,9 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Product Queue",
   description: "Manage the product research queue",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
